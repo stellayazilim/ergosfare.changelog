@@ -2,22 +2,22 @@
 <rss version="2.0" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:content="http://purl.org/rss/1.0/modules/content/">
     <channel>
         <title>Ergosfare</title>
-        <link>https://example.com</link>
+        <link>https://stellayazilim.github.io/ergosfare.changelog/</link>
         <description>Modern Mediator for .NET developers</description>
-        <lastBuildDate>Thu, 28 Aug 2025 01:30:31 GMT</lastBuildDate>
+        <lastBuildDate>Thu, 28 Aug 2025 01:37:49 GMT</lastBuildDate>
         <docs>https://validator.w3.org/feed/docs/rss2.html</docs>
         <generator>https://github.com/jpmonette/feed</generator>
         <image>
             <title>Ergosfare</title>
-            <url>https://example.com/favicon.ico</url>
-            <link>https://example.com</link>
+            <url>https://stellayazilim.github.io/ergosfare.changelog//favicon.ico</url>
+            <link>https://stellayazilim.github.io/ergosfare.changelog/</link>
         </image>
         <copyright>All rights reserved 2025</copyright>
         <item>
             <title><![CDATA[page]]></title>
-            <link>https://example.com/posts/page</link>
-            <guid isPermaLink="false">https://example.com/posts/page</guid>
-            <pubDate>Thu, 28 Aug 2025 01:30:31 GMT</pubDate>
+            <link>https://stellayazilim.github.io/ergosfare.changelog//posts/page</link>
+            <guid isPermaLink="false">https://stellayazilim.github.io/ergosfare.changelog//posts/page</guid>
+            <pubDate>Thu, 28 Aug 2025 01:37:49 GMT</pubDate>
             <content:encoded><![CDATA[import { SparkleIcon } from '@/components/SparkleIcon'
 
 export { Layout as default } from '@/components/Layout'
