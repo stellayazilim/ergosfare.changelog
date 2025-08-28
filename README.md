@@ -1,15 +1,7 @@
-# Commit
-
-Commit is a [Tailwind Plus](https://tailwindcss.com/plus) site template built using [Tailwind CSS](https://tailwindcss.com) and [Next.js](https://nextjs.org).
-
-## Getting started
-
-To get started, first install dependencies via npm:
 
 ```bash
 npm install
 ```
-
 Next, create a `.env.local` file in the root of your project and set the `NEXT_PUBLIC_SITE_URL` environment variable to your site's public URL:
 
 ```
@@ -74,13 +66,4 @@ Make sure to set your `NEXT_PUBLIC_SITE_URL` environment variable as the RSS fee
 
 ## License
 
-This site template is a commercial product and is licensed under the [Tailwind Plus license](https://tailwindcss.com/plus/license).
-
-## Learn more
-
-To learn more about the technologies used in this site template, see the following resources:
-
-- [Tailwind CSS](https://tailwindcss.com/docs) - the official Tailwind CSS documentation
-- [Next.js](https://nextjs.org/docs) - the official Next.js documentation
-- [Motion One](https://motion.dev/) - the official Motion One documentation
-- [MDX](https://mdxjs.com/) - the official MDX documentation
+This site  is a commercial product and is licensed under the [Tailwind Plus license](https://tailwindcss.com/plus/license).
