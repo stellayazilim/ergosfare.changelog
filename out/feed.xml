@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0">
+    <channel>
+        <title>Ergosfare</title>
+        <link>https://example.com</link>
+        <description>Modern Mediator for .NET developers</description>
+        <lastBuildDate>Thu, 28 Aug 2025 01:06:44 GMT</lastBuildDate>
+        <docs>https://validator.w3.org/feed/docs/rss2.html</docs>
+        <generator>https://github.com/jpmonette/feed</generator>
+        <image>
+            <title>Ergosfare</title>
+            <url>https://example.com/favicon.ico</url>
+            <link>https://example.com</link>
+        </image>
+        <copyright>All rights reserved 2025</copyright>
+    </channel>
+</rss>
