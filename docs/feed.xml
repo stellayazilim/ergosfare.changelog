@@ -4,7 +4,7 @@
         <title>Ergosfare</title>
         <link>https://stellayazilim.github.io/ergosfare.changelog</link>
         <description>Modern Mediator for .NET developers</description>
-        <lastBuildDate>Thu, 28 Aug 2025 02:04:14 GMT</lastBuildDate>
+        <lastBuildDate>Thu, 28 Aug 2025 02:06:39 GMT</lastBuildDate>
         <docs>https://validator.w3.org/feed/docs/rss2.html</docs>
         <generator>https://github.com/jpmonette/feed</generator>
         <image>
@@ -17,7 +17,7 @@
             <title><![CDATA[page]]></title>
             <link>https://stellayazilim.github.io/ergosfare.changelog/posts/page</link>
             <guid isPermaLink="false">https://stellayazilim.github.io/ergosfare.changelog/posts/page</guid>
-            <pubDate>Thu, 28 Aug 2025 02:04:14 GMT</pubDate>
+            <pubDate>Thu, 28 Aug 2025 02:06:39 GMT</pubDate>
             <content:encoded><![CDATA[import { SparkleIcon } from '@/components/SparkleIcon'
 
 export { Layout as default } from '@/components/Layout'
