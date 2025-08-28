@@ -1,13 +1,9 @@
 import assert from 'assert'
 import * as cheerio from 'cheerio'
 import { Feed } from 'feed'
-
+export const revalidate = 60
 export async function GET(req: Request) {
-  let siteUrl = process.env.NEXT_PUBLIC_SITE_URL
-
-  if (!siteUrl) {
-    throw Error('Missing NEXT_PUBLIC_SITE_URL environment variable')
-  }
+  let siteUrl = process.env.NEXT_PUBLIC_SITE_URL || ''
 
   let author = {
     name: 'Kerim Çetinbaş',
@@ -28,7 +24,7 @@ export async function GET(req: Request) {
     },
   })
 
-  let html = await (await fetch(new URL('/', req.url))).text()
+  let html = await (await fetch(siteUrl)).text()
   let $ = cheerio.load(html)
 
   $('article').each(function () {
