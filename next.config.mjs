@@ -19,6 +19,9 @@ const nextConfig = {
   basePath: '/ergosfare.changelog',
   assetPrefix: '/ergosfare.changelog/',
   pageExtensions: ['js', 'jsx', 'ts', 'tsx', 'mdx'],
+  images: {
+    unoptimized: true,
+  },
 }
 
 export default withMDX(nextConfig)
