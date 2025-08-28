@@ -17,7 +17,7 @@ const withMDX = nextMDX({
 const nextConfig = {
   output: 'export',
   basePath: '/ergosfare.changelog',
-  assetPrefix: '/ergosfare.changelog/',
+  assetPrefix: 'https://stellayazilim.github.io/ergosfare.changelog/',
   pageExtensions: ['js', 'jsx', 'ts', 'tsx', 'mdx'],
   images: {
     unoptimized: true,
