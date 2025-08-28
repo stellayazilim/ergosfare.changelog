@@ -1,63 +1,66 @@
+import assert from 'assert'
+import * as cheerio from 'cheerio'
 import { Feed } from 'feed'
-import path from 'node:path'
-import * as fs from 'node:fs'
-import matter from 'gray-matter'
 export const revalidate = 60
+export async function GET(req: Request) {
+  let siteUrl = process.env.NEXT_PUBLIC_SITE_URL || ''
 
-export async function GET() {
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL
-  if (!siteUrl)
-    throw new Error('Missing NEXT_PUBLIC_SITE_URL environment variable')
-
-  const author = {
+  let author = {
     name: 'Kerim Çetinbaş',
     email: 'a.cetinbas@icloud.com',
   }
 
-  const feed = new Feed({
+  let feed = new Feed({
     title: 'Ergosfare',
     description: 'Modern Mediator for .NET developers',
     author,
     id: siteUrl,
     link: siteUrl,
-    image: `${siteUrl}/favicon.ico`,
-    favicon: `${siteUrl}/favicon.ico`,
+    image: `${siteUrl}/ergosfare.changelog/favicon.ico`,
+    favicon: `${siteUrl}/ergosfare.changelog/favicon.ico`,
     copyright: `All rights reserved ${new Date().getFullYear()}`,
     feedLinks: {
-      rss2: `${siteUrl}/feed.xml`,
+      rss2: `${siteUrl}/ergosfare.changelog/feed.xml`,
     },
   })
 
-  // Path to your MDX posts
-  const postsDir = path.join(process.cwd(), 'src/app')
+  let html = await (await fetch(siteUrl + `/ergosfare.changelog`)).text()
+  let $ = cheerio.load(html)
 
-  // Read all MDX files
-  const files = fs.readdirSync(postsDir).filter((f) => f.endsWith('.mdx'))
+  $('article').each(function () {
+    let id = $(this).attr('id')
+    assert(typeof id === 'string')
 
-  for (const file of files) {
-    const filePath = path.join(postsDir, file)
-    const source = fs.readFileSync(filePath, 'utf-8')
+    let url = `${siteUrl}/ergosfare.changelog/#${id}`
+    let heading = $(this).find('h2').first()
+    let title = heading.text()
+    let date = $(this).find('time').first().attr('datetime')
 
-    const { data, content } = matter(source) // parse frontmatter
-    const slug = file.replace(/\.mdx?$/, '')
-    const url = `${siteUrl}/posts/${slug}`
+    // Tidy content
+    heading.remove()
+    $(this).find('h3 svg').remove()
+
+    let content = $(this).find('[data-mdx-content]').first().html()
+
+    assert(typeof date === 'string')
+    assert(typeof content === 'string')
 
     feed.addItem({
-      title: data.title || slug,
+      title,
       id: url,
       link: url,
       content,
       author: [author],
       contributor: [author],
-      date: new Date(data.date || Date.now()),
+      date: new Date(date),
     })
-  }
+  })
 
   return new Response(feed.rss2(), {
     status: 200,
     headers: {
       'content-type': 'application/xml',
-      'cache-control': 'max-age=31556952', // 1 year
+      'cache-control': 's-maxage=31556952',
     },
   })
 }

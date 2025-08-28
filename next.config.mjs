@@ -18,7 +18,7 @@ const nextConfig = {
   output: 'export',
   distDir: 'docs',
   basePath: '/ergosfare.changelog',
-  assetPrefix: 'https://stellayazilim.github.io/ergosfare.changelog/',
+  assetPrefix: '/ergosfare.changelog/',
   pageExtensions: ['js', 'jsx', 'ts', 'tsx', 'mdx'],
   images: {
     unoptimized: true,
