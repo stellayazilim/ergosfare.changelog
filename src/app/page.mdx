@@ -2,6 +2,19 @@ import { SparkleIcon } from '@/components/SparkleIcon'
 
 export { Layout as default } from '@/components/Layout'
 
+---
+
+## v0.0.11e - Refactor {{ date: '2025-09-01'}}
+
+### <SparkleIcon /> Changed
+
+* `ActualTypeOrFirstAssignableTypeMessageResolveStrategy`
+
+  * Now constructor-injected with `IMessageRegistry`.
+  * Simplified `Find` method signature (`Find(Type)` instead of `Find(Type, IMessageRegistry)`).
+* `MessageMediator` updated to use the simplified strategy method.
+* DI registration added for `ActualTypeOrFirstAssignableTypeMessageResolveStrategy`.
+* Unit tests updated to reflect new DI-based message resolution.
 
 ---
 
