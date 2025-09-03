@@ -2,7 +2,7 @@ import { SparkleIcon } from '@/components/SparkleIcon'
 
 export { Layout as default } from '@/components/Layout'
 
-___
+---
 
 ## v0.0.14e – Event Hub Refines & Proxy Event System - {{ date: '2025-09-03' }}
 ### <SparkleIcon /> New Features
@@ -34,10 +34,13 @@ HubEvent includes equality operators (`==`, `!=`) and value-based `Equals` / `Ge
 * This release lays the foundation for next-generation plug-ins and modules, allowing n-party decoupled event-driven integrations.
 
 * Users can create their own events implementing HubEvent for custom plugin scenarios.
-___
+
+---
 
 ## v0.0.13e - Republish of v0.0.12e - {{ date: '2025-09-03' }}
 - no changes
+
+---
 
 ## v0.0.12e - EventHub - {{ date: '2025-09-03' }}
 
@@ -57,7 +60,7 @@ ___
 - This EventHub forms the foundation for future plugins and modules that do not need to be directly coupled with main modules.
 
 - It enables developers to write their own n-party plugins, extending the system safely and independently.
----
+
 #### **Side Note:**
 
 * This EventHub system is **separate from the message mediation events** (pre/post/interceptor) used in command, query, and event pipelines.
