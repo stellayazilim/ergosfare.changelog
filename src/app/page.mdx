@@ -23,8 +23,7 @@ HubEvent includes equality operators (`==`, `!=`) and value-based `Equals` / `Ge
 * Replace `ISubscription` with `ISubscription<TEvent>`
 * Replace `IHubEvent` with the abstract `HubEvent` class
 
-### <SparkleIcon /> Testing
-#### Unit tests enhanced to cover:
+### <SparkleIcon /> Testing - Unit tests enhanced to cover:
 * Strong/weak subscription invoke behavior
 * Proxy `+=` / `-=` operators
 * Subscription matching and unsubscription
@@ -55,7 +54,7 @@ HubEvent includes equality operators (`==`, `!=`) and value-based `Equals` / `Ge
 * **Thread-safe Publishing**: Publishing events is safe across multiple threads, with automatic cleanup of dead weak subscriptions.
 * **Extensible Plugin Support**: Modules can subscribe to events without modifying core components.
 
-#### <SparkleIcon /> **Keynote**
+####  **Keynote**
 
 - This EventHub forms the foundation for future plugins and modules that do not need to be directly coupled with main modules.
 
