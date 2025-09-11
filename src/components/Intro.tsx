@@ -62,14 +62,14 @@ export function Intro() {
 
       <div className="mt-8 flex flex-wrap justify-center gap-x-1 gap-y-3 sm:gap-x-2 lg:justify-start">
         <IconLink
-          href="https://stellayazilim.github.io/Ergosfare.Docs/"
+          href="https://stellayazilim.github.io/ergosfare.docs/"
           icon={BookIcon}
           className="flex-none"
         >
           Documentation
         </IconLink>
         <IconLink
-          href="https://github.com/stellayazilim/Ergosfare"
+          href="https://github.com/stellayazilim/ergosfare"
           icon={GitHubIcon}
           className="flex-none"
         >
