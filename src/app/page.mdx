@@ -31,18 +31,19 @@ class JoinUserToRoleCommandHandler(
         // snapshot database call
         // if this handler fails at other than this block
         // result from this snapshot persisted, and this block skipped
-        var role = await snapshotService.Snapshot("snapshot-role-exist", new Snapshot<RoleEntity>(() => 
+        var role = await snapshotService.Snapshot(
+            "snapshot-role-exist", new Snapshot<RoleEntity>(() => 
         {
-            return await roleRepository.GetRoleByNameAsync(command.Role.Name, context.CancellationToken)        
+            return await roleRepository
+                .GetRoleByNameAsync(command.Role.Name, context.CancellationToken)        
         })); 
         
         comamand.User.AddRole(role)
         
         
-        await snapshotService.Snapshot("snapshot-add-user-to-role-snapshot", new Snapshot(() => 
-        {
-            return await userRepository.UpdateUserAsync(command.User, context.CancellationToken); 
-        })); 
+        await userRepository
+                .UpdateUserAsync(command.User, context.CancellationToken); 
+       
     } 
 }
 ```
