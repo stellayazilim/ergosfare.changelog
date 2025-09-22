@@ -4,6 +4,77 @@ export { Layout as default } from '@/components/Layout'
 
 ---
 
+
+## v0.2.0e  {{ date: '2025-9-22' }}
+
+
+
+### <SparkleIcon />  Snapshot & Checkpointing
+* Introduced `PipelineCheckpoint` to track `Message`, `Result`, and `Success` for partial or full pipeline snapshotting.
+* Pre- and post-interceptors updated to support snapshot-aware execution.
+* Streaming and synchronous handlers can skip already completed checkpoints.
+* Provides scoped caching within handlers; allows optional manual persistence by consumers.
+
+
+```csharp
+class JoinUserToRoleCommandHandler(
+    IUserRepository userRepository
+    IRoleRepository roleRepository,
+    ISnapshotService snapshotService
+    ) : ICommandHandler<JoinUserToRoleCommand> 
+{
+
+    async Task HandleAsync(JoinUserToRoleCommand command, IExecutionContext context ) 
+    {
+        // snapshot database call
+        // if this handler fails at other than this block
+        // result from this snapshot persisted, and this block skipped
+        var role = await snapshotService.Snapshot("snapshot-role-exist", new Snapshot<RoleEntity>(() => 
+        {
+            return await roleRepository.GetRoleByNameAsync(command.Role.Name, context.CancellationToken)        
+        })); 
+        
+        comamand.User.AddRole(role)
+        
+        
+        await snapshotService.Snapshot("snapshot-add-user-to-role-snapshot", new Snapshot(() => 
+        {
+            return await userRepository.UpdateUserAsync(command.User, context.CancellationToken); 
+        })); 
+    } 
+}
+```
+
+### <SparkleIcon />  Retry Mechanism
+
+* Added `ErgosfareExecutionContext.RetryCount` to track retry attempts.
+* `Retry()` publishes `PipelineRetrySignal` and throws `ExecutionRetryRequestedException`.
+* `MessageMediator` refactored to catch retry requests and re-mediate with preserved context.
+* MediateOptions support retry limits via `Retry` property.
+### <SparkleIcon />  Streaming Mediation Improvements
+
+* `SingleStreamHandlerMediationStrategy` fixed to ensure **pre-interceptors execute before the main handler**.
+* Partial snapshotting after streaming completes successfully.
+
+### <SparkleIcon />  Internal Changes
+
+* Added `ExecutionRetryRequestedException` class.
+* Added internal setters for `PipelineCheckpoint.Message` and `Result`.
+* All mediation strategies refactored for snapshot support.
+* Pre- and post-invokers refactored for snapshot compatibility.
+
+### <SparkleIcon />  Fixes & Minor Adjustments
+
+* Streaming strategy bug fixed: pre-interceptors now run correctly before streaming handler execution.
+
+### <SparkleIcon />  Notes
+
+* This will be the last **major/minor premature release** (`0.2.0e`).
+* Only **patch releases** will follow in this branch.
+* The next full release will be **stable v1.0.0**.
+* Consumers can leverage checkpoints for caching or manual persistence in fire-and-forget pipelines.
+---
+
 ## v0.1.3e - {{ date: '2025-09-20' }}
 
 
