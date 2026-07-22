@@ -4,6 +4,36 @@ export { Layout as default } from '@/components/Layout'
 
 ---
 
+## v1.4.0 {{ date: '2026-07-22' }}
+
+### <SparkleIcon /> Typed Interceptors Without the Third Type Parameter
+
+* The two-parameter typed interceptor interfaces — `ICommandExceptionInterceptor<TCommand, TResult>`, `ICommandPostInterceptor<TCommand, TResult>`, `IQueryExceptionInterceptor<TQuery, TResult>`, `IQueryPostInterceptor<TQuery, TResult>` — now declare the type-safe `HandleAsync` member returning the typed result directly.
+* Their type parameters are deliberately **invariant**: the pipeline invokes interceptors through the non-generic root interfaces, so interface variance bought nothing — while `in TResult` blocked typed returns, which was the only reason the three-parameter `TModifiedResult` variants existed.
+* The three-parameter variants are marked `[Obsolete]` and will be removed in the next major version.
+
+```csharp
+// before: ICommandExceptionInterceptor<MyCommand, string, string>
+// after:
+class MyInterceptor : ICommandExceptionInterceptor<MyCommand, string>
+{
+    public Task<string?> HandleAsync(MyCommand cmd, string? result, Exception ex, IExecutionContext ctx)
+    {
+        // ...
+    }
+}
+```
+
+### CI
+
+* Coverage and unit-test workflows run as a single job with both SDKs installed; the coverage badge is generated only on pushes to `main`, fixing the badge-branch push race between parallel matrix jobs.
+
+### <SparkleIcon /> Notes
+
+* Migration: implementors of the previous marker-only two-parameter interfaces now implement the typed member (returning `Task<TResult>` / `Task<TResult?>`) instead of the base `Task<object>` member.
+
+---
+
 ## v1.3.0 {{ date: '2026-07-22' }}
 
 ### <SparkleIcon /> Provider-Independent Dependency Graphs — scope-per-dispatch ~2.6x faster
