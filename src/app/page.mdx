@@ -4,6 +4,94 @@ export { Layout as default } from '@/components/Layout'
 
 ---
 
+## v1.3.0 {{ date: '2026-07-22' }}
+
+### <SparkleIcon /> Provider-Independent Dependency Graphs — scope-per-dispatch ~2.6x faster
+
+* The resolved pipeline of a message (ordered stages, closed generic handler types) is built once per message type and group set, and shared process-wide. A fresh DI scope no longer rebuilds factory state, per-scope caches, or lazy wrapper graphs.
+* Handler and interceptor instances resolve **per invocation** from the dispatching scope's provider, so DI lifetimes are honored exactly: singleton → container-cached, scoped → one per scope, transient → one per dispatch.
+* Benchmark (100k dispatches/op, .NET 9, Ryzen 7 7800X3D, fresh scope per dispatch): **45.6 ms / 146.5 MB → 17.2 ms / 53.4 MB**.
+
+### Internal Surface Changes — Core / Core.Abstractions
+
+* `IMessageDependencies` reshaped: ten lazy collections → **six fixed `IReadOnlyList` stages**; interceptor stages merge direct and indirect registrations into a single pre-ordered list (direct first, preserving execution order).
+* `ILazyHandler` / `ILazyHandlerCollection` replaced by `IHandlerReference<THandler, TDescriptor>`: the descriptor, the pre-computed concrete `HandlerType`, and `Resolve(IServiceProvider)`. `MakeGenericType` now runs once per closed message type at plan build — never on the dispatch path.
+* `IMessageMediationStrategy.Mediate` gained an `IServiceProvider` parameter: the mediator hands the scope provider down the pipeline explicitly — resolution is the dispatcher's responsibility. The execution context stays a **pure data carrier** between handlers and exposes no service provider.
+* Non-contract implementation types in Core internalized (descriptor builders, `HandlerDescriptorBuilderFactory`, `MessageDependenciesFactory`); default implementations of public abstractions (`ResultAdapterService`, `LruCacheStrategy`) remain public.
+
+### Bug Fixes
+
+* `IEventPostInterceptor` (and its typed variant) default implementations recursed infinitely instead of forwarding to the typed member — registering an event post-interceptor would crash the dispatch. Fixed with regression tests.
+* `LruCacheStrategy` could grow to `maxSize + 1` before evicting; the post-add count now always stays within `maxSize`.
+
+### <SparkleIcon /> Notes
+
+* Behavioral change: transient-registered handlers (the framework default) now resolve once per dispatch instead of being implicitly reused within a scope — matching what the registration declares. To keep instance reuse, register handlers as singletons or call `ForceMemoizedHandlers()`.
+* Line coverage raised from 86.6% to **92.2%**; the codebase now builds with **zero compiler warnings**.
+
+---
+
+## v1.2.0 {{ date: '2026-07-22' }}
+
+### <SparkleIcon /> Dispatch Hot-Path Overhaul — ~5x faster, ~11x less allocation
+
+* Resolved message descriptors are cached per message `Type`; the previous full-registry scan per dispatch is gone.
+* Zero-interceptor fast path: when a message has no interceptors, the handler is invoked directly — no invoker objects or empty-collection iterations.
+* Ordered, group-filtered pipeline shapes are cached process-wide as provider-independent `MessagePipelineShape`; fresh scopes only materialize cheap lazy wrappers.
+* Benchmark (100k dispatches/op, .NET 9, Ryzen 7 7800X3D): raw mediator path **31.6 ms / 112.9 MB → 4.4 ms / 3.1 MB**; MediatR on the same benchmark: 6.1 ms / 18.3 MB.
+
+### Lifetime-Aware Handler Resolution — scoped dependencies now supported
+
+* Handler resolution now honors registered DI lifetimes. Fully singleton pipelines keep the process-wide memoized fast path; everything else resolves from the calling scope's provider — so scoped constructor dependencies (`DbContext`, unit-of-work) get one instance per scope, and disposables are disposed with their scope.
+* Previously handler instances were silently memoized process-wide: the first dispatch captured the first caller's scope and reused it forever — a latent correctness bug.
+* Opt-out: `ForceMemoizedHandlers()` restores the pre-v1.2 memoize-everything behavior.
+
+### Deprecations
+
+* The entire `AmbientExecutionContext` API is now `[Obsolete]`: the execution context is passed to every handler and interceptor as a parameter. Ambient publication is opt-in via `EnableAmbientExecutionContext()` and disabled by default — no `AsyncLocal` write occurs on the dispatch path.
+
+### Runtime Registration Correctness
+
+* `MessageRegistry` now tracks a monotonic `Version`; dependency caches invalidate when the registry changes, so runtime registrations become visible to subsequent dispatches.
+
+### Bug Fixes
+
+* `IAsyncPostInterceptor` default implementation now forwards the `IExecutionContext` parameter instead of reading the ambient context.
+* `SingleStreamHandlerMediationStrategy` no longer unconditionally overwrites the ambient context.
+* Final interceptor types are now registered with the DI container.
+
+### <SparkleIcon /> Notes
+
+* Behavioral change vs v1.1.0: scoped/transient-registered handlers are no longer silently memoized across scopes — they behave as their registration declares.
+
+---
+
+## v1.1.0 {{ date: '2026-03-23' }}
+
+### <SparkleIcon /> LRU Cache Strategy for MessageDescriptorCache
+
+* Added pluggable `IDescriptorCacheStrategy` interface for flexible cache management.
+* Implemented **LRU (Least Recently Used)** cache strategy with configurable size limit (default: 100 entries).
+* Automatic eviction of least recently used entries to control memory usage.
+
+### Performance Optimizations
+
+* Replaced LINQ chains with manual loops in `ResolveHandlers` to eliminate per-call delegate allocations.
+* Optimized group filtering and sorting with single-pass array operations.
+* Reduced allocation overhead in the handler resolution hot path.
+
+### Bug Fixes
+
+* Fixed excessive memory allocation in the handler resolution path.
+* Corrected group intersection logic for better filtering accuracy.
+
+### <SparkleIcon /> Notes
+
+* Cache strategy can be overridden by implementing a custom `IDescriptorCacheStrategy`.
+* Existing consumers see reduced allocations and improved performance without API changes.
+
+---
+
 ## v1.0.1 {{ date: '2025-12-16' }} 
 
 
