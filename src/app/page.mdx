@@ -4,6 +4,70 @@ export { Layout as default } from '@/components/Layout'
 
 ---
 
+## v2.0.0 {{ date: '2026-07-25' }}
+
+First stable release of the v2 line. The theme: **all dispatch-shape work moves to compile time or to a once-per-message-type plan** — registration is source-generated, dispatch generics close at compile time, execution contexts are pooled, and the dispatch path carries no reflection, no `MakeGenericType`, no registry scan and no `AsyncLocal`.
+
+### <SparkleIcon /> Source-Generated Registration
+
+* A new incremental Roslyn generator (`Stella.Ergosfare.SourceGenerator`) discovers every Ergosfare construct in the compilation and emits `RegisterGenerated()` extensions on the module builders — a drop-in replacement for `RegisterFromAssembly(...)` with **pre-computed handler descriptors**, so registration performs no reflection over handler types.
+* **Reference scanning:** the consuming project's generator also walks referenced assemblies, so a library's handlers register through the app's generated code with zero registration code in the library. Opt out per project with `<ErgosfareSourceGeneratorScanReferences>false</ErgosfareSourceGeneratorScanReferences>`.
+* **Discovery keys:** `[DiscoveryKey("reporting.daily")]` gates a type out of default discovery until a registration call selects it; `RegisterGenerated("reporting.*")` cherry-picks by exact key or trailing-`*` glob, and calls chain safely.
+* **Generated dispatch roots** let the executor, event-broadcast and stream-invoker caches build pipelines **without `MakeGenericType`**, giving Native AOT a static anchor for every instantiation — value-type messages included.
+* Diagnostics: `ERGOSG001` (inaccessible registrable type), `ERGOSG002` (invisible referenced type).
+
+```csharp
+// Program.cs — no assembly scanning, no reflection
+using Stella.Ergosfare.Generated;
+
+services.AddErgosfare(o => o
+    .AddCommandModule(m => m.RegisterGenerated())
+    .AddQueryModule(m => m.RegisterGenerated())
+    .AddEventModule(m => m.RegisterGenerated()));
+```
+
+### <SparkleIcon /> Nested Dispatch, Scopes and Pooled Contexts
+
+* `context.CreateScope()` returns a struct scope wrapping a clean, pooled child context — isolated items, inherited cancellation token — so calling the mediator from inside a handler is a first-class pattern. An inner `Abort()` ends only the inner pipeline.
+* Facades take the child directly: `SendAsync`/`QueryAsync`/`PublishAsync` overloads accepting `IExecutionContext`.
+* Dispatches rent and return contexts through a `[ThreadStatic]`-first pool with a synchronous fast path, so a synchronously completing pipeline builds no async state machine.
+
+### Dispatch Engine
+
+* **Per-message-type pipeline executors:** dispatch goes through a pipeline closed over the message's runtime type, built once per (message type, result type, group set) and cached process-wide. The facades resolve executors with a dictionary lookup.
+* **Independent sync/async contracts, typed end to end.** All DIM bridges and object-typed root members are gone; synchronous typed interceptors actually work now — the old bridge crashed them with `InvalidCastException`.
+* **`ValueTask`-first surface** across handlers, interceptors and facades; synchronously completing handlers allocate nothing.
+* **Thread-safe registration** behind a gate with lock-free snapshot readers, fixing registration races, mid-registration enumeration crashes and a resolve-cache poisoning bug.
+
+### Pipeline Control
+
+* **`[ExcludeFromPipeline]`** on a message type excludes covariantly matched interceptors — blanket or per group. Interceptors registered for the message type itself always run.
+* **Event broadcast delivers to covariantly matched handlers**, the event's own handlers first, then indirect ones.
+* Single-parameter pre-interceptors now return the **typed message** (`ValueTask<TMessage>`) instead of `ValueTask<object>` — a pre-interceptor carries no result, so the message type is all there is to return.
+
+### Removed
+
+* **`Stella.Ergosfare.Contracts` folded into Core.Abstractions** — `GroupAttribute`/`WeightAttribute` now live in `Stella.Ergosfare.Core.Abstractions.Attributes`; the package is no longer produced.
+* **`AmbientExecutionContext`** and `EnableAmbientExecutionContext()`, deprecated since v1.2.0 — no `AsyncLocal` remains on the dispatch path.
+* The obsolete three-parameter `TModifiedResult` interceptor interfaces, deprecated in v1.4.0.
+
+### Benchmark
+
+100k no-op dispatches, Ryzen 7 7800X3D, .NET 9:
+
+| Scenario | Mean | Allocated |
+|---|---:|---:|
+| Ergosfare — typical usage | 6.87 ms | **2.29 MB** |
+| MediatR — typical usage | 6.09 ms | 18.31 MB |
+
+### <SparkleIcon /> Notes
+
+* Migration: `Task`/`Task<T>` → `ValueTask`/`ValueTask<T>` on handler and interceptor signatures (mechanical); `AmbientExecutionContext.Current` → the `IExecutionContext` parameter your handler already receives; drop the `Stella.Ergosfare.Contracts` package reference.
+* Do not hold an `IExecutionContext` beyond the dispatch it belongs to — contexts are pooled.
+* Full details and the complete migration list are in [CHANGELOG.md](https://github.com/stellayazilim/ergosfare/blob/main/CHANGELOG.md).
+
+---
+
 ## v1.4.0 {{ date: '2026-07-22' }}
 
 ### <SparkleIcon /> Typed Interceptors Without the Third Type Parameter
