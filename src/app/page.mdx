@@ -64,7 +64,7 @@ services.AddErgosfare(o => o
 
 * Migration: `Task`/`Task<T>` → `ValueTask`/`ValueTask<T>` on handler and interceptor signatures (mechanical); `AmbientExecutionContext.Current` → the `IExecutionContext` parameter your handler already receives; drop the `Stella.Ergosfare.Contracts` package reference.
 * Do not hold an `IExecutionContext` beyond the dispatch it belongs to — contexts are pooled.
-* Full details and the complete migration list are in [CHANGELOG.md](https://github.com/stellayazilim/ergosfare/blob/main/CHANGELOG.md).
+* Full details and the complete migration list are in [CHANGELOG.md](https://github.com/stellayazilim/Ergosfare/blob/main/CHANGELOG.md).
 
 ---
 
