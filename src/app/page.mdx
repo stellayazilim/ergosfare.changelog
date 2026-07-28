@@ -4,6 +4,60 @@ export { Layout as default } from '@/components/Layout'
 
 ---
 
+## v2.3.0-preview {{ date: '2026-07-28' }}
+
+Preview release. The theme: **event publishing joins the fast lane, and resolving a mediator stops costing more than dispatching through it.** v2.2.0-preview put commands and queries on the executor fast path; this release brings event broadcasting onto the same footing, collapses every facade resolution to a single object over a shared dispatch engine, and ships the source generator's first compile-time pipeline plans. Behavior is unchanged on every path; the public API grows, nothing breaks.
+
+### <SparkleIcon /> Broadcast Fast Lane
+
+* A group-less `PublishAsync` without settings rents a pooled execution context and reuses a cached default strategy — no settings object, no filter list, no strategy allocation. Caller-supplied items are adopted for the dispatch and detached untouched, so handler writes stay visible to the caller.
+* The broadcast invoker holds the event's resolved pipeline directly, re-validated against the registry version and keyed by the dependencies-factory reference, so one container's plan is never served to another.
+* An unfiltered publish over an interceptor-free pipeline loops the handler arrays straight through — synchronously while handlers complete synchronously, bailing to an awaiting helper on the first suspension, order preserved.
+* **Fixed:** a broadcast now continues with the event instance a pre-interceptor returns.
+* Grouped publishes, predicate filters, external contexts and foreign mediator implementations keep the original `Mediate` path unchanged.
+
+### <SparkleIcon /> Single-Object Facades: `MessageDispatchEngine`
+
+* Resolving a facade used to build two transients per scope — the facade plus its `IMessageMediator`. The executor dispatch bodies now live in `MessageDispatchEngine`, a process-wide singleton taking the calling scope's provider per call; the facades bind to it through single-constructor DI shapes, so every resolution builds exactly one object.
+* `CommandMediator`, `QueryMediator` and `EventMediator` gain a public engine constructor; the `IMessageMediator` constructors remain for direct construction. Scoped handler resolution still binds to the calling scope — verified under `ValidateScopes = true`.
+
+### <SparkleIcon /> Hot-Path Trims
+
+* **Result lookup:** group-less result dispatch drops the (message, result) composite-key hash for a per-message-type last-used slot — one `Type` lookup plus a reference check, with the composite store kept authoritative underneath.
+* **Typed publish:** `PublishAsync<TEvent>` resolves its invoker from a static-generic holder guarded by `@event.GetType() == typeof(TEvent)`; base-typed generic calls keep resolving by runtime type, so polymorphic publishes are untouched.
+
+### <SparkleIcon /> Compile-Time Pipeline Plans
+
+* When the generator proves a command's whole discovered pipeline is a single default-discovery async handler, it emits `AddVoidPlan<TMessage, THandler>()` and the executor closes over both types — the handler call devirtualizes, no contract pattern match.
+* Plans are advisory: the registry-version-guarded cache re-validates the pipeline, runtime registrations invalidate plans exactly as they invalidate runtime executors, and a mismatched plan falls back to the runtime dispatch shape with identical behavior. `RegisterFromAssembly` and manual-registration users never see a plan.
+
+```csharp
+// Nothing to opt into — RegisterGenerated() now also installs the plans:
+services.AddErgosfare(o => o.AddCommandModule(m => m.RegisterGenerated()));
+```
+
+### Benchmark
+
+Per-operation BenchmarkDotNet numbers, Ryzen 7 7800X3D, .NET 9.0.11, measured 2026-07-28. *Scoped* creates a fresh DI scope per dispatch; MediatR columns are from the same runs:
+
+| Dispatch | Ergosfare | MediatR |
+|---|---:|---:|
+| Command (root) | **30.5 ns** / 24 B | 60.3 ns / 192 B |
+| Command, generated plan (root) | **26.5 ns** / 24 B | — |
+| Query (root) | **34.4 ns** / 24 B | 53.8 ns / 192 B |
+| Event, 2 handlers (root) | **49.3 ns** / 48 B | 83.4 ns / 440 B |
+| Command (scoped) | **81.7 ns** / 192 B | 101.5 ns / 352 B |
+| Query (scoped) | **85.9 ns** / 200 B | 115.8 ns / 352 B |
+| Event (scoped) | **100.9 ns** / 232 B | 130.3 ns / 600 B |
+
+### <SparkleIcon /> Notes
+
+* Across the cycle the scoped rows moved: command 91.4 → 81.7 ns, query 109.7 → 85.9 ns, event 117.7 → 100.9 ns. The scoped query — the one row that still trailed MediatR — now leads it comfortably.
+* Public API additions: `MessageDispatchEngine`, engine constructors on the three facades, `GeneratedDispatchRoots.AddVoidPlan`/`FindVoidPlan` with their root/visitor types; `EventMediator` is no longer sealed. No removals, no migration steps.
+* Full details in [CHANGELOG.md](https://github.com/stellayazilim/Ergosfare/blob/preview/CHANGELOG.md).
+
+---
+
 ## v2.2.0-preview {{ date: '2026-07-28' }}
 
 Preview release. The theme: **the dispatch path stops re-deriving what it already knows.** v2.0.0 moved dispatch-shape work off the per-call path; this release removes what was left — the per-dispatch lookup of the cached plan, the pipeline machinery around a pipeline that has exactly one stage, and a DI lifetime that charged every dispatch for a scope entry it never used. No public API changes, no migration steps.
