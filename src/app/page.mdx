@@ -4,6 +4,50 @@ export { Layout as default } from '@/components/Layout'
 
 ---
 
+## v2.2.0-preview {{ date: '2026-07-28' }}
+
+Preview release. The theme: **the dispatch path stops re-deriving what it already knows.** v2.0.0 moved dispatch-shape work off the per-call path; this release removes what was left — the per-dispatch lookup of the cached plan, the pipeline machinery around a pipeline that has exactly one stage, and a DI lifetime that charged every dispatch for a scope entry it never used. No public API changes, no migration steps.
+
+### <SparkleIcon /> Straight-Through Dispatch
+
+* When a message's plan resolves to exactly one main handler, no interceptors and no result adapters, the executor now calls the handler's typed member and hands back its `ValueTask` unchanged — no mediation-strategy object, no async state machine. The condition is precomputed when the plan is built, not evaluated per dispatch.
+* Add a single interceptor and the message goes back through the full staged pipeline. The fast path optimises the empty case; it is not a second execution model.
+
+### <SparkleIcon /> Executor-Level Dependency Cache
+
+* An executor is already per (message type, result type, group set), so it now holds its resolved dependencies directly, re-validated against the registry version. The per-dispatch factory call and its `ConcurrentDictionary` lookup become a field read and an integer compare.
+* Runtime registrations bump the version and the next dispatch rebuilds, so late registration keeps working.
+* Group-less dispatch — nearly all of it — is keyed by message type alone: no group materialization, no composite-key hashing on the hot path.
+* Both optimisations live in the executors, so they cover `SendAsync`, `QueryAsync` and `DispatchAsync`. Event publishing and streaming queries still go through the options path and are unchanged — future work.
+
+### <SparkleIcon /> Mediator Facades Are Transient
+
+* `ICommandMediator`, `IQueryMediator`, `IEventMediator`, `IPublisher` and `IMessageMediator` are registered transient instead of scoped.
+* Behavior is identical: a facade is stateless, and DI hands a transient service the resolving scope's provider exactly as it does a scoped one, so handlers still resolve from the calling scope and scoped handler dependencies are honored — verified under `ValidateScopes = true`.
+* What changes is cost. Scoped resolution takes the scope's lock and writes into the scope's resolved-services dictionary; that never amortizes when every dispatch creates its own scope, and with `ICommandMediator` → `IMessageMediator` both scoped, the scope-per-dispatch path paid it twice.
+
+```csharp
+// Custom modules registering their own facade should follow suit:
+configuration.Services.TryAddTransient<ISagaMediator, SagaMediator>();
+```
+
+### Benchmark
+
+100k no-op dispatches per operation, Ryzen 7 7800X3D, .NET 9. The two Ergosfare columns are back-to-back runs on the same machine:
+
+| Scenario | v2.1.0-preview | v2.2.0-preview | MediatR |
+|---|---:|---:|---:|
+| Typical usage | 6.76 ms / 2.29 MB | **2.97 ms** / **2.29 MB** | 5.79 ms / 18.31 MB |
+| Web-server shape | 20.11 ms / 38.91 MB | **8.46 ms** / **21.36 MB** | 10.28 ms / 33.57 MB |
+
+### <SparkleIcon /> Notes
+
+* The web-server shape — a fresh DI scope per dispatch — was the one scenario v2.0.0 documented as a loss against MediatR. It is now a win on both axes, though the time margin (~18%) is narrower than the allocation margin (~36%), and that row is dominated by DI scope creation for both libraries.
+* The internal engine path (`IMessageMediator.Mediate` with pre-built `MediateOptions`) is unchanged at ~6.3 ms and now trails the public facade: it is a separate entry point running its own resolve and mediation strategies, so it reaches neither the cached plan nor the straight-through path. Still supported for custom mediation strategies.
+* Full details in [CHANGELOG.md](https://github.com/stellayazilim/Ergosfare/blob/preview/CHANGELOG.md).
+
+---
+
 ## v2.0.0 {{ date: '2026-07-25' }}
 
 First stable release of the v2 line. The theme: **all dispatch-shape work moves to compile time or to a once-per-message-type plan** — registration is source-generated, dispatch generics close at compile time, execution contexts are pooled, and the dispatch path carries no reflection, no `MakeGenericType`, no registry scan and no `AsyncLocal`.
