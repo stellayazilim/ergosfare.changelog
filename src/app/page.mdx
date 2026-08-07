@@ -4,6 +4,49 @@ export { Layout as default } from '@/components/Layout'
 
 ---
 
+## v2.1.0 {{ date: '2026-08-07' }}
+
+Stable release. Promotes the entire preview cycle since v2.0.0 to the stable channel: everything in the v2.2.0-preview and v2.3.0-preview entries below, plus the closing sweep released as v2.4.0-preview the same day — summarized here, since this is its first appearance on this page. Install commands drop `--prerelease`; no API removals, no migration steps.
+
+### <SparkleIcon /> The Remaining Lanes Join the Fast Path
+
+* **Grouped dispatch.** Grouped command/query dispatch stops paying per-call group materialization and joined-key hashing: a per-message-type last-used group-set slot answers the common one-stable-group-set shape with an ordinal compare, allocation-free. Grouped publishes leave the `Mediate` fallback entirely and run the broadcast fast lane against the same group-filtered pipeline — a grouped publish now costs what a group-less one does (56.2 vs 56.9 ns in the release benchmark).
+* **Streaming.** Engine-backed `StreamAsync` runs against the invoker-cached, registry-version-guarded pipeline plan — no per-call `MediateOptions`, descriptor lookup or scope-resolved mediator. Context semantics are unchanged, and an unregistered query still fails at call time.
+* **Typed void dispatch.** `MessageDispatchEngine.DispatchVoidAsync<TMessage>` resolves its executor from a static-generic holder behind a runtime-type guard. It is deliberately not a `DispatchAsync` overload — a same-name generic would out-rank the result overload for echo-typed calls and silently reroute them.
+
+### <SparkleIcon /> Compile-Time Result Plans and Direct Handler Construction
+
+* The generator now plans result pipelines too: `AddResultPlan<TMessage, TResult, THandler>` closes the executor over all three types, so single-handler queries and result commands dispatch devirtualized.
+* Both plan shapes can carry a `static () => new THandler()` factory. The gate is strict on both ends: at compile time the handler's only constructor must be public and parameterless, with no `required` members and no disposability; at runtime the factory is used only while the handler's effective registration is the module's own plain transient — any user factory, lifetime override or memoization routes back through the container.
+* The lifetime capture behind that verdict (and the memoized fast path) now runs at first resolution instead of inside `AddErgosfare`, so registrations added before `BuildServiceProvider` are always honored.
+
+```csharp
+// Still nothing to opt into — RegisterGenerated() installs roots, plans and factories:
+services.AddErgosfare(o => o.AddQueryModule(m => m.RegisterGenerated()));
+```
+
+### Benchmark
+
+Per-operation numbers, Ryzen 7 7800X3D, .NET 9.0.11, measured 2026-08-07. New in this cycle: [martinothamar/Mediator](https://github.com/martinothamar/Mediator) rows at its out-of-the-box defaults (source-generated dispatch, singleton lifetime), alongside MediatR's:
+
+| Dispatch (root) | Ergosfare | MediatR | Mediator |
+|---|---:|---:|---:|
+| Command, generated plan | **21.2 ns** / 24 B | 66.2 ns / 192 B | 8.3 ns / 0 B |
+| Command, memoized handlers | **24.5 ns** / 0 B | — | — |
+| Query, generated plan | **25.0 ns** / 24 B | 52.9 ns / 192 B | 8.2 ns / 0 B |
+| Event, 2 handlers | **56.9 ns** / 48 B | 84.9 ns / 440 B | 15.9 ns / 0 B |
+
+The honest reading: Ergosfare leads MediatR on every row; Mediator — which trades runtime registration, group filtering, polymorphic dispatch and the execution-context model for fully static dispatch — leads Ergosfare. This cycle narrowed the planned-void gap from ~3.4× to ~2.3×. The remaining 24 B is the transient handler instance itself — a lifetime-honoring choice, not overhead; the memoized row is the like-for-like comparison against Mediator's singleton default.
+
+### <SparkleIcon /> Notes
+
+* CI now publishes and runs a NativeAOT smoke app (`PublishAot=true`, trim/AOT warnings as errors) covering every dispatch shape, struct messages included.
+* Public API additions: `DispatchVoidAsync<TMessage>`; `AddResultPlan`/`FindResultPlan` with their root/visitor types; factory-taking `AddVoidPlan`/`AddResultPlan` overloads.
+* One deliberate edge: a custom `IMessageMediator` decorating the scope's mediator no longer sees grouped publishes or streams on engine-backed facades — consistent with the group-less lane since v2.3.0-preview.
+* Full details in [CHANGELOG.md](https://github.com/stellayazilim/Ergosfare/blob/main/CHANGELOG.md).
+
+---
+
 ## v2.3.0-preview {{ date: '2026-07-28' }}
 
 Preview release. The theme: **event publishing joins the fast lane, and resolving a mediator stops costing more than dispatching through it.** v2.2.0-preview put commands and queries on the executor fast path; this release brings event broadcasting onto the same footing, collapses every facade resolution to a single object over a shared dispatch engine, and ships the source generator's first compile-time pipeline plans. Behavior is unchanged on every path; the public API grows, nothing breaks.
