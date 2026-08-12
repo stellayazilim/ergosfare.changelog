@@ -4,144 +4,135 @@ export { Layout as default } from '@/components/Layout'
 
 ---
 
-## v2.1.0 {{ date: '2026-08-07' }}
+## v2.3.0 {{ date: '2026-08-12' }}
 
-Stable release. Promotes the entire preview cycle since v2.0.0 to the stable channel: everything in the v2.2.0-preview and v2.3.0-preview entries below, plus the closing sweep released as v2.4.0-preview the same day — summarized here, since this is its first appearance on this page. Install commands drop `--prerelease`; no API removals, no migration steps.
+Stable release. The theme: **the pipeline becomes a compiled artifact.** The preview cycle from v2.2.0-preview through v2.9.0-preview moved Ergosfare from a source-assisted runtime registry to a closed, source-generated dispatch model. The generator's frozen composition table is now the authority for handler and interceptor relationships; module registration selects which discovered constructs a container runs, and dispatch executes that selection without reflective scanning or runtime pipeline mutation.
 
-### <SparkleIcon /> The Remaining Lanes Join the Fast Path
+This release also finishes the public dispatch contract: concrete execution contexts, explicit nested scopes, typed exception interception, predictable abort semantics, covariant main-handler resolution, canonical resultless pipelines and one failure model for missing handlers. **This is a breaking release** — see the [v2.2 → v2.3 migration guide](https://stellayazilim.github.io/ergosfare.docs/migration/v2.2-to-v2.3).
 
-* **Grouped dispatch.** Grouped command/query dispatch stops paying per-call group materialization and joined-key hashing: a per-message-type last-used group-set slot answers the common one-stable-group-set shape with an ordinal compare, allocation-free. Grouped publishes leave the `Mediate` fallback entirely and run the broadcast fast lane against the same group-filtered pipeline — a grouped publish now costs what a group-less one does (56.2 vs 56.9 ns in the release benchmark).
-* **Streaming.** Engine-backed `StreamAsync` runs against the invoker-cached, registry-version-guarded pipeline plan — no per-call `MediateOptions`, descriptor lookup or scope-resolved mediator. Context semantics are unchanged, and an unregistered query still fails at call time.
-* **Typed void dispatch.** `MessageDispatchEngine.DispatchVoidAsync<TMessage>` resolves its executor from a static-generic holder behind a runtime-type guard. It is deliberately not a `DispatchAsync` overload — a same-name generic would out-rank the result overload for echo-typed calls and silently reroute them.
+### <SparkleIcon /> Frozen Composition Replaces the Runtime Registry
 
-### <SparkleIcon /> Compile-Time Result Plans and Direct Handler Construction
-
-* The generator now plans result pipelines too: `AddResultPlan<TMessage, TResult, THandler>` closes the executor over all three types, so single-handler queries and result commands dispatch devirtualized.
-* Both plan shapes can carry a `static () => new THandler()` factory. The gate is strict on both ends: at compile time the handler's only constructor must be public and parameterless, with no `required` members and no disposability; at runtime the factory is used only while the handler's effective registration is the module's own plain transient — any user factory, lifetime override or memoization routes back through the container.
-* The lifetime capture behind that verdict (and the memoized fast path) now runs at first resolution instead of inside `AddErgosfare`, so registrations added before `BuildServiceProvider` are always honored.
+* `FrozenCompositionCatalog` replaces `IMessageRegistry` end to end. The generator emits one immutable composition per message: direct and covariant handler rows plus the pre, post, exception and final interceptor stages in execution order.
+* Registration is selection, not discovery. `RegisterGenerated()` and `Register<T>()` select constructs from the compiled table for one DI container; repeated and overlapping selections are harmless unions.
+* Runtime mutation and reflective assembly scanning are gone. A dynamically loaded assembly cannot append a new message shape after compilation, and there is no registration window whose timing can change an already running application.
+* Generated participant types preserve the constructor metadata Microsoft DI needs under trimming. The NativeAOT smoke covers command, query and event activation — multi-subscriber broadcast and value-type messages included — in a published native binary.
 
 ```csharp
-// Still nothing to opt into — RegisterGenerated() installs roots, plans and factories:
-services.AddErgosfare(o => o.AddQueryModule(m => m.RegisterGenerated()));
+// The registration surface is unchanged; what it means underneath is not.
+services.AddErgosfare(o => o
+    .AddCommandModule(c => c.RegisterGenerated())
+    .AddQueryModule(q => q.RegisterGenerated())
+    .AddEventModule(e => e.RegisterGenerated()));
 ```
+
+### <SparkleIcon /> Source-Generated Dispatch and NativeAOT
+
+* Generated dispatch roots close executor and invoker generics over concrete message and result types at compile time. The hot path avoids registry scans, reflection, `MakeGenericType` and object-typed handler bridges.
+* Single-handler command and query pipelines receive generated plans. Eligible transient handlers can also receive direct-construction factories, including provider-based factories for constructor dependencies, while runtime gates preserve the configured DI lifetime and user overrides.
+* Interceptor-bearing pipelines receive generated staged plans: straight-line typed calls for pre, handler, post, exception and final stages. A composition mismatch gives up only the optimization and falls back to the general executor.
+* The generator scans referenced assemblies, reports inaccessible constructs as diagnostics, respects nullable annotations in consumer compilations and can trim provably unreachable handlers at the composition root.
+
+### <SparkleIcon /> A Pinned Pipeline Contract
+
+* A public-surface contract suite runs the dispatch scenarios across the supported composition lanes on .NET 9, .NET 10 and .NET 11 — 194 scenarios on each. Its lane-map baseline records not only the result, but the dispatch path that produced it.
+* `Abort()`, `Abort(reason)` and `Abort(reason, value)` stop the pipeline immediately and surface `ExecutionAbortedException` to the caller. Exception and final interceptors do not run after an abort; nested callers decide whether an inner abort ends the outer pipeline too.
+* Resultless commands and events carry the single `Unit.Value` instance after successful execution. `null` retains the distinct meaning "no result was produced."
+* Main-handler resolution is a priority ladder over the direct and covariantly matched rows. A sole direct handler wins outright, however many covariant candidates exist; without one, a supertype handler serves the assignable message. Two claimants *at the same level* are a contest, counted before anything resolves, so the message runs neither and the caller gets `MultipleHandlerFoundException` — reported at build time as `ERGOSG010`.
+* New typed `...ExceptionInterceptorFor<TException>` contracts declare the exception type they accept and follow catch semantics, so the exception arrives typed and nothing has to remember to rethrow. They sit **beside** the untyped contracts, which are unchanged and stay the right shape for an interceptor handling several exception types or logging every failure. With either family, an exception is swallowed only when an interceptor that actually matched it returns a value; otherwise the original exception and stack leave the pipeline unchanged.
+* Missing and filtered-out handlers consistently use `NoHandlerFoundException`, which now derives from `InvalidOperationException` and exposes `MessageType`. Event publication honors `ThrowIfNoHandlerFound` for every no-subscriber shape.
+* A selected participant the container cannot resolve fails before the first stage with `UnresolvableParticipantException`, naming both the message and participant.
+
+### <SparkleIcon /> `ErgosfareContext` and Nested Dispatch
+
+* The public sealed `ErgosfareContext` replaces `IExecutionContext`. Handler and interceptor contracts take the concrete type, eliminating an interface dispatch whose only implementation was internal.
+* Its public constructor accepts optional items and cancellation, so callers can own a context for engine-level dispatch. Facade dispatches continue to rent contexts from the allocation-conscious pool.
+* `ErgosfareContextScope` replaces `ExecutionContextScope`. `CreateScope()` is its only producer: a child starts with clean items, inherits cancellation and returns its pooled context on disposal. Disposing a default scope remains a no-op.
+* Execution state stays explicit. There is no `AsyncLocal` context and no service provider exposed through the context.
+
+### <SparkleIcon /> Modules, Events and Cross-Cutting Policies
+
+* Commands, queries and events remain independent modules over the shared core. The event module is also the open lane for POCO messages: `IEventHandler<TEvent>` and `PublishAsync<TEvent>` accept any non-null event type and retain broadcast semantics.
+* `AddCoreModule`, `CoreModule`, `CoreModuleBuilder` and `IModuleBuilder` are removed. Plain messages move to the event module; custom modules select from the frozen composition table and register their facade and services with DI.
+* Cross-cutting interceptors join built-in module partitions by carrying their marker interfaces directly — for example an `IAsyncPreInterceptor<IMessage>` that also implements `ICommand`, `IQuery` and `IEvent`. Covariant rows apply it broadly and `[ExcludeFromPipeline]` provides blanket or group-specific opt-out.
+
+```csharp
+public sealed class LoggingInterceptor
+    : IAsyncPreInterceptor<IMessage>, ICommand, IQuery, IEvent { … }
+```
+
+* `GroupSet` provides a reusable canonical group filter, avoiding per-dispatch settings allocation while preserving grouped handler and interceptor selection.
+* Discovery keys support exact and prefix-glob selection across the application and its references. `[ExcludeFromDiscovery]` remains the explicit exclusion boundary.
 
 ### Benchmark
 
-Per-operation numbers, Ryzen 7 7800X3D, .NET 9.0.11, measured 2026-08-07. New in this cycle: [martinothamar/Mediator](https://github.com/martinothamar/Mediator) rows at its out-of-the-box defaults (source-generated dispatch, singleton lifetime), alongside MediatR's:
+Per-dispatch numbers from the v2.7.0-preview benchmark tree, Ryzen 7 7800X3D, .NET 9.0.11:
 
-| Dispatch (root) | Ergosfare | MediatR | Mediator |
-|---|---:|---:|---:|
-| Command, generated plan | **21.2 ns** / 24 B | 66.2 ns / 192 B | 8.3 ns / 0 B |
-| Command, memoized handlers | **24.5 ns** / 0 B | — | — |
-| Query, generated plan | **25.0 ns** / 24 B | 52.9 ns / 192 B | 8.2 ns / 0 B |
-| Event, 2 handlers | **56.9 ns** / 48 B | 84.9 ns / 440 B | 15.9 ns / 0 B |
+| Shape | Mean | Allocated |
+|---|---:|---:|
+| Command, no result, generated plan | **19.9 ns** | 24 B |
+| Query, result, generated plan | **24.0 ns** | 24 B |
+| Query, five participants | **120.2 ns** | 96 B |
+| Event, two subscribers | **50.5 ns** | 48 B |
 
-The honest reading: Ergosfare leads MediatR on every row; Mediator — which trades runtime registration, group filtering, polymorphic dispatch and the execution-context model for fully static dispatch — leads Ergosfare. This cycle narrowed the planned-void gap from ~3.4× to ~2.3×. The remaining 24 B is the transient handler instance itself — a lifetime-honoring choice, not overhead; the memoized row is the like-for-like comparison against Mediator's singleton default.
+Request-shaped rows — the ones creating a DI scope per dispatch and resolving a mediator inside it — stayed ahead of the equivalent MediatR rows. Mediator facades are transient, stateless wrappers over a shared dispatch engine: they capture the resolving scope's provider without paying the scoped-service cache and lock cost on every request-shaped dispatch.
+
+### <SparkleIcon /> Target Frameworks
+
+* Packages carry **`net11.0` beside `net10.0` and `net9.0`**. The addition buys no compatibility on its own — roll-forward already let a `net11.0` project bind `lib/net10.0/` — so what it carries is proof: the sources compile under the C# 15 compiler, and the contract suite holds its lane map on .NET 11 on every run.
+* **Nothing from .NET 11 or C# 15 is adopted.** The runtime-side gains need no target framework at all; a `net10.0` assembly already collects them running on .NET 11. C# 15 union types store their payload in an `object?` field and box value types — the object-typed bridge the dispatch hot path was built to avoid — and the `closed` modifier applies to classes while the handler contracts are interfaces.
+* **Runtime Async** is the one target-framework-gated win, deliberately deferred: it rewrites async codegen wholesale and needs the lane-map baseline re-validated against the abort semantics first.
+* `LangVersion` stays `latest`, which now resolves to **C# 15 for the `net9.0` and `net10.0` compilations too** — deliberate, so a construct cannot compile on one target and fail on another.
+* .NET 11 reaches GA on **2026-11-10**. Assets shipped for `net11.0` before that date are compiled against **preview reference packs** and want a re-pack against the GA reference pack. Building the repository now requires the .NET 11 preview SDK; that affects contributors, not consumers.
+
+### <SparkleIcon /> Breaking Changes
+
+* **Removed:** `IMessageRegistry` and descriptor APIs, `RegisterFromAssembly`, `RegisterDescriptors`, `MediateOptions`, message-resolve strategies, the low-level `IMessageMediator.Mediate` surface, `IExecutionContext`, `ExecutionContextScope`, `IPoolReturnable`, `AddCoreModule`, `CoreModule`, `CoreModuleBuilder` and `IModuleBuilder`.
+* **Replace registry calls** with source-generated `RegisterGenerated()` selections or statically known `Register<T>()` selections. Runtime-computed participant and assembly registration is no longer supported.
+* **Replace context types** with `ErgosfareContext`, and create nested contexts only through `context.CreateScope()`.
+* **Move plain messages** to `IEventHandler<T>` / `PublishAsync<T>`, and tag broad interceptors with the command, query and event marker interfaces they should join.
+* **Audit abort callers:** abort now reaches the call site as `ExecutionAbortedException` and prevents all downstream stages, including final interceptors.
+* **Audit contested handlers:** two main handlers on the same level — two direct, or two covariant with no direct one — now conflict instead of letting one win silently. A direct handler still beats covariant ones; that pairing is not a contest.
+* The full solution, contract suite and NativeAOT smoke are green on the stable promotion commit with zero build warnings.
 
 ### <SparkleIcon /> Notes
 
-* CI now publishes and runs a NativeAOT smoke app (`PublishAot=true`, trim/AOT warnings as errors) covering every dispatch shape, struct messages included.
-* Public API additions: `DispatchVoidAsync<TMessage>`; `AddResultPlan`/`FindResultPlan` with their root/visitor types; factory-taking `AddVoidPlan`/`AddResultPlan` overloads.
-* One deliberate edge: a custom `IMessageMediator` decorating the scope's mediator no longer sees grouped publishes or streams on engine-backed facades — consistent with the group-less lane since v2.3.0-preview.
+* Step-by-step upgrade instructions: [Migrating from v2.2 to v2.3](https://stellayazilim.github.io/ergosfare.docs/migration/v2.2-to-v2.3).
 * Full details in [CHANGELOG.md](https://github.com/stellayazilim/Ergosfare/blob/main/CHANGELOG.md).
 
 ---
 
-## v2.3.0-preview {{ date: '2026-07-28' }}
+## v2.2.0 {{ date: '2026-08-10' }}
 
-Preview release. The theme: **event publishing joins the fast lane, and resolving a mediator stops costing more than dispatching through it.** v2.2.0-preview put commands and queries on the executor fast path; this release brings event broadcasting onto the same footing, collapses every facade resolution to a single object over a shared dispatch engine, and ships the source generator's first compile-time pipeline plans. Behavior is unchanged on every path; the public API grows, nothing breaks.
+Stable release. Deprecates the reflection-based assembly-scanning surface one release ahead of its removal: the `RegisterFromAssembly` overloads on the four module builders, the `IModuleBuilder` seam and `ResultAdapterBuilder`'s scan now carry `[Obsolete]` and warn at build time.
 
-### <SparkleIcon /> Broadcast Fast Lane
+### <SparkleIcon /> One Release of Warning
 
-* A group-less `PublishAsync` without settings rents a pooled execution context and reuses a cached default strategy — no settings object, no filter list, no strategy allocation. Caller-supplied items are adopted for the dispatch and detached untouched, so handler writes stay visible to the caller.
-* The broadcast invoker holds the event's resolved pipeline directly, re-validated against the registry version and keyed by the dependencies-factory reference, so one container's plan is never served to another.
-* An unfiltered publish over an interceptor-free pipeline loops the handler arrays straight through — synchronously while handlers complete synchronously, bailing to an awaiting helper on the first suspension, order preserved.
-* **Fixed:** a broadcast now continues with the event instance a pre-interceptor returns.
-* Grouped publishes, predicate filters, external contexts and foreign mediator implementations keep the original `Mediate` path unchanged.
-
-### <SparkleIcon /> Single-Object Facades: `MessageDispatchEngine`
-
-* Resolving a facade used to build two transients per scope — the facade plus its `IMessageMediator`. The executor dispatch bodies now live in `MessageDispatchEngine`, a process-wide singleton taking the calling scope's provider per call; the facades bind to it through single-constructor DI shapes, so every resolution builds exactly one object.
-* `CommandMediator`, `QueryMediator` and `EventMediator` gain a public engine constructor; the `IMessageMediator` constructors remain for direct construction. Scoped handler resolution still binds to the calling scope — verified under `ValidateScopes = true`.
-
-### <SparkleIcon /> Hot-Path Trims
-
-* **Result lookup:** group-less result dispatch drops the (message, result) composite-key hash for a per-message-type last-used slot — one `Type` lookup plus a reference check, with the composite store kept authoritative underneath.
-* **Typed publish:** `PublishAsync<TEvent>` resolves its invoker from a static-generic holder guarded by `@event.GetType() == typeof(TEvent)`; base-typed generic calls keep resolving by runtime type, so polymorphic publishes are untouched.
-
-### <SparkleIcon /> Compile-Time Pipeline Plans
-
-* When the generator proves a command's whole discovered pipeline is a single default-discovery async handler, it emits `AddVoidPlan<TMessage, THandler>()` and the executor closes over both types — the handler call devirtualizes, no contract pattern match.
-* Plans are advisory: the registry-version-guarded cache re-validates the pipeline, runtime registrations invalidate plans exactly as they invalidate runtime executors, and a mismatched plan falls back to the runtime dispatch shape with identical behavior. `RegisterFromAssembly` and manual-registration users never see a plan.
+* Compile-time discovery is the migration target — `RegisterGenerated()` / `RegisterGenerated(pattern)` and `Register<T>()`, adapters via `Register<TAdapter>()`.
+* No API removals and no behavior changes in this release. The builders' tests keep pinning the obsolete surface until the removal lands.
 
 ```csharp
-// Nothing to opt into — RegisterGenerated() now also installs the plans:
-services.AddErgosfare(o => o.AddCommandModule(m => m.RegisterGenerated()));
+// Warns in v2.2, removed in v2.3:
+.AddCommandModule(c => c.RegisterFromAssembly(typeof(CreateProduct).Assembly))
+
+// The replacement:
+.AddCommandModule(c => c.RegisterGenerated())
 ```
-
-### Benchmark
-
-Per-operation BenchmarkDotNet numbers, Ryzen 7 7800X3D, .NET 9.0.11, measured 2026-07-28. *Scoped* creates a fresh DI scope per dispatch; MediatR columns are from the same runs:
-
-| Dispatch | Ergosfare | MediatR |
-|---|---:|---:|
-| Command (root) | **30.5 ns** / 24 B | 60.3 ns / 192 B |
-| Command, generated plan (root) | **26.5 ns** / 24 B | — |
-| Query (root) | **34.4 ns** / 24 B | 53.8 ns / 192 B |
-| Event, 2 handlers (root) | **49.3 ns** / 48 B | 83.4 ns / 440 B |
-| Command (scoped) | **81.7 ns** / 192 B | 101.5 ns / 352 B |
-| Query (scoped) | **85.9 ns** / 200 B | 115.8 ns / 352 B |
-| Event (scoped) | **100.9 ns** / 232 B | 130.3 ns / 600 B |
 
 ### <SparkleIcon /> Notes
 
-* Across the cycle the scoped rows moved: command 91.4 → 81.7 ns, query 109.7 → 85.9 ns, event 117.7 → 100.9 ns. The scoped query — the one row that still trailed MediatR — now leads it comfortably.
-* Public API additions: `MessageDispatchEngine`, engine constructors on the three facades, `GeneratedDispatchRoots.AddVoidPlan`/`FindVoidPlan` with their root/visitor types; `EventMediator` is no longer sealed. No removals, no migration steps.
-* Full details in [CHANGELOG.md](https://github.com/stellayazilim/Ergosfare/blob/preview/CHANGELOG.md).
+* Clearing every `[Obsolete]` warning on v2.2 is most of the work of the v2.3 upgrade — see [Migrating from v2.2 to v2.3](https://stellayazilim.github.io/ergosfare.docs/migration/v2.2-to-v2.3).
+* Full details in [CHANGELOG.md](https://github.com/stellayazilim/Ergosfare/blob/main/CHANGELOG.md).
 
 ---
 
-## v2.2.0-preview {{ date: '2026-07-28' }}
+## v2.1.0 {{ date: '2026-08-07' }}
 
-Preview release. The theme: **the dispatch path stops re-deriving what it already knows.** v2.0.0 moved dispatch-shape work off the per-call path; this release removes what was left — the per-dispatch lookup of the cached plan, the pipeline machinery around a pipeline that has exactly one stage, and a DI lifetime that charged every dispatch for a scope entry it never used. No public API changes, no migration steps.
-
-### <SparkleIcon /> Straight-Through Dispatch
-
-* When a message's plan resolves to exactly one main handler, no interceptors and no result adapters, the executor now calls the handler's typed member and hands back its `ValueTask` unchanged — no mediation-strategy object, no async state machine. The condition is precomputed when the plan is built, not evaluated per dispatch.
-* Add a single interceptor and the message goes back through the full staged pipeline. The fast path optimises the empty case; it is not a second execution model.
-
-### <SparkleIcon /> Executor-Level Dependency Cache
-
-* An executor is already per (message type, result type, group set), so it now holds its resolved dependencies directly, re-validated against the registry version. The per-dispatch factory call and its `ConcurrentDictionary` lookup become a field read and an integer compare.
-* Runtime registrations bump the version and the next dispatch rebuilds, so late registration keeps working.
-* Group-less dispatch — nearly all of it — is keyed by message type alone: no group materialization, no composite-key hashing on the hot path.
-* Both optimisations live in the executors, so they cover `SendAsync`, `QueryAsync` and `DispatchAsync`. Event publishing and streaming queries still go through the options path and are unchanged — future work.
-
-### <SparkleIcon /> Mediator Facades Are Transient
-
-* `ICommandMediator`, `IQueryMediator`, `IEventMediator`, `IPublisher` and `IMessageMediator` are registered transient instead of scoped.
-* Behavior is identical: a facade is stateless, and DI hands a transient service the resolving scope's provider exactly as it does a scoped one, so handlers still resolve from the calling scope and scoped handler dependencies are honored — verified under `ValidateScopes = true`.
-* What changes is cost. Scoped resolution takes the scope's lock and writes into the scope's resolved-services dictionary; that never amortizes when every dispatch creates its own scope, and with `ICommandMediator` → `IMessageMediator` both scoped, the scope-per-dispatch path paid it twice.
-
-```csharp
-// Custom modules registering their own facade should follow suit:
-configuration.Services.TryAddTransient<ISagaMediator, SagaMediator>();
-```
-
-### Benchmark
-
-100k no-op dispatches per operation, Ryzen 7 7800X3D, .NET 9. The two Ergosfare columns are back-to-back runs on the same machine:
-
-| Scenario | v2.1.0-preview | v2.2.0-preview | MediatR |
-|---|---:|---:|---:|
-| Typical usage | 6.76 ms / 2.29 MB | **2.97 ms** / **2.29 MB** | 5.79 ms / 18.31 MB |
-| Web-server shape | 20.11 ms / 38.91 MB | **8.46 ms** / **21.36 MB** | 10.28 ms / 33.57 MB |
+Stable maintenance release of the v2 line. Its preview carried repository and release-channel chores only — no API changes and no migration steps.
 
 ### <SparkleIcon /> Notes
 
-* The web-server shape — a fresh DI scope per dispatch — was the one scenario v2.0.0 documented as a loss against MediatR. It is now a win on both axes, though the time margin (~18%) is narrower than the allocation margin (~36%), and that row is dominated by DI scope creation for both libraries.
-* The internal engine path (`IMessageMediator.Mediate` with pre-built `MediateOptions`) is unchanged at ~6.3 ms and now trails the public facade: it is a separate entry point running its own resolve and mediation strategies, so it reaches neither the cached plan nor the straight-through path. Still supported for custom mediation strategies.
-* Full details in [CHANGELOG.md](https://github.com/stellayazilim/Ergosfare/blob/preview/CHANGELOG.md).
+* The feature history that these entries previously repeated release by release is consolidated into the v2.3.0 entry above, which is where the whole preview cycle from v2.2.0-preview through v2.9.0-preview reached the stable channel.
+* Full details in [CHANGELOG.md](https://github.com/stellayazilim/Ergosfare/blob/main/CHANGELOG.md).
 
 ---
 
