@@ -4,6 +4,53 @@ export { Layout as default } from '@/components/Layout'
 
 ---
 
+## Unreleased {{ date: '2026-08-18' }}
+
+**The runtime dispatch lane is gone.** A dispatch either runs its compiled plan or fails
+stating why — nothing is dispatched at run time that was not produced at compile time. The
+reflective executor construction (`Activator.CreateInstance` over `MakeGenericType`), the
+general pipeline bodies, the mediation and invocation strategies, and every
+fall-back-to-the-runtime-lane decision point are deleted — streaming included: the
+generator now compiles stream plans that run the whole pre → handler → enumeration →
+post/exception/final pipeline as straight-line typed calls.
+
+### <SparkleIcon /> One Lane, Loud Failures
+
+* A pipeline no verified plan serves raises `UnplannedDispatchException`, carrying the
+  message type and a `Reason`: `NoCompiledPlan`, `NoDispatchRoot`, `CompositionDiverged`,
+  `MemoizedInstances`, `UnplannedResultAdapter`, `ForeignDependenciesFactory` or
+  `UnplannedGroupSet`. The message states what happened and the remedy, and a composition
+  mismatch names the diverged stage — `pre-interceptors: compiled [Audit], live [Audit,
+  Outbox]` — so a participant that exists only at run time can never again silently not
+  run.
+* The failure surface stays precise: a message nobody serves still raises
+  `NoHandlerFoundException`, a contested level still raises
+  `MultipleHandlerFoundException`, and a publish that reaches nobody is still a silent
+  no-op — a group-only event published without groups included.
+* A user's `AddSingleton` handler keeps working: only demanded memoization bars a plan,
+  since resolving a singleton per dispatch returns the one instance anyway.
+  `ForceMemoizedHandlers` itself now fails every dispatch, loudly.
+* The dispatch path carries no trimming or AOT suppressions any more: nothing closes a
+  generic reflectively.
+
+### <SparkleIcon /> Streaming Joins the Compiled Plans
+
+* Every discoverable `(query, item)` pair gets a compiled stream plan reproducing the
+  retired strategy exactly: a pre-interceptor may replace the query, an abort cuts the
+  stream and skips the final stage, a deferred failure flows through the post, exception
+  and final stages, and an unmatched exception leaves with its original stack.
+* Grouped streams have no per-set plans yet and fail as `UnplannedGroupSet`; the
+  `Strategies` namespace — `IMessageMediationStrategy`, the invocation strategies and the
+  stream mediation strategy — is removed with the lane it served.
+
+### Breaking
+
+* Constructs the generator does not model yet fail loudly instead of degrading: keyed
+  discovery dispatches, synchronous main-handler shapes, nested and generic message
+  types, `[ExcludeFromPipeline]` messages, covariant-only sends, runtime-configured
+  default result adapters, custom dependencies factories, and grouped streams. Each is
+  pinned in the test suites and queued for compiled coverage.
+
 ## v2.3.0 {{ date: '2026-08-12' }}
 
 Stable release. The theme: **the pipeline becomes a compiled artifact.** The preview cycle from v2.2.0-preview through v2.9.0-preview moved Ergosfare from a source-assisted runtime registry to a closed, source-generated dispatch model. The generator's frozen composition table is now the authority for handler and interceptor relationships; module registration selects which discovered constructs a container runs, and dispatch executes that selection without reflective scanning or runtime pipeline mutation.
