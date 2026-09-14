@@ -1,46 +1,52 @@
-## v2.16.0-preview – '2026-09-14'
+## v2.4.0 – '2026-09-14'
 
-### Fluent stream inputs and conversion
+### Compiled selection and generated execution
 
-* Add `StreamInput<TChunk, TSelf>`, `CommandStream<TChunk, TSelf>` and
-  `QueryStream<TChunk, TSelf>`. Metadata lives on the concrete message; fluent operations
-  preserve its type. Existing experimental metadata-wrapper types remain available.
-* `Pipe` starts producing immediately, before dispatch if necessary, and waits when the
-  bounded queue fills. Capacity counts queued items rather than bytes or reachable memory.
-* Add `IPipeConverter<T>` for incremental byte-stream decoding and `IPipeConverter<S,T>`
-  for item conversion, plus `Func<byte,T>`, `Func<S,T>` and per-source-item `Func<T>` overloads.
-  Byte and owned-byte-block helpers and stateful UTF-8 line conversion leave sources open.
-* Implement explicit `IBufferWriter<T>` with growable staging separate from queue capacity.
-  `FlushAsync` publishes staged items with backpressure; manual writes and bound sources
-  cannot be mixed.
-* Move `IAsyncDisposable` to the root `ErgosfareStream`. Repeated disposal shares completion;
-  dispatch/disposal stops bound production and waits for its cleanup. Keep `ERGOEXP003`:
-  dedicated stream interceptor signatures and output-only cancellation remain open design work.
-* Keep the core `IStreamHandler` visible so consumers can combine it with module markers.
+Promote the completed preview changes since v2.3.1. This stable release includes breaking
+public API changes announced through the v2.3.1 deprecations. Stream input, adapters and
+plugins retain their experimental warning markers.
 
-### Stream termination and failures
+* Unify command, query, event and stream execution around generated executable plans with
+  fixed composition metadata and hardcoded participant/adapter calls. Remove legacy roots,
+  parallel single-handler tables, runtime pipeline construction and reflective fallbacks.
+* `AddGenerated()` / `AddGenerated(pattern)` and explicit `Register<T>()` select the
+  compiler-visible participant pool. Selection does not enable runtime discovery or later
+  dynamic participant registration. Unselected types produce no executable plans.
+* Keep application selections in referenced assemblies and generate executable plans in
+  the composition root. Referenced libraries can export selections with
+  `ErgosfareGeneratePlans=false`; endpoint calls are checked against those selections.
+* Preserve closed generic message identities and their groups. Open generic selections
+  include visible compatible constructions; unseen runtime constructions have no plans.
+* Validate result adapters at compile time and embed their calls in plans. Adapters are
+  helpers, not DI services. Preserve the polymorphic handler resolution priority ladder.
 
-* Generated output-stream plans run cleanup on early output disposal. Pending input writers
-  and final interceptors receive `StreamOutputDisposedException`, derived from
-  `ExecutionAbortedException`. Explicit context abort continues to skip finals.
-* Output-stream failures bypass exception interceptors and propagate to the consumer and
-  final stage. Source/handler errors are preserved when cleanup also fails.
-* Command input termination forwards the original dispatch failure to waiting producers.
-  Bounded input, concurrent input/output, refusal, cancellation and producer cleanup have
-  regression coverage, included in the CI unit-test filter.
+### Public dispatch surface and diagnostics
 
-### Multipart upload recipe and E2E
+* Grouped dispatch accepts `GroupSet`, including collection expressions, implicit strings
+  and `GroupSet.Of()`. Remove the deprecated string/array/enumerable overload families.
+* Module mediators use their shared internal engine and dispatch provider through DI;
+  remove unused facade layers and obsolete manual construction surfaces.
+* Missing handlers for compile-time-known messages/groups, including events, produce
+  compilation diagnostics. Dynamic groups use generated filtering plans and fail at
+  runtime when no main handler matches; they cannot discover additional participants.
+* Experimental surfaces emit `ERGOEXP001–003` warnings rather than unconditional errors.
+  Preview deprecation can precede removal in the corresponding stable minor release.
 
-* Add `/streams/upload`: an English browser form with progress and cancellation. The
-  endpoint pipes raw `Request.Body`; pre validates multipart headers and the file section,
-  then shares its first payload chunk and open parser with the handler through context.
-* The handler writes incrementally, preserves byte identity and SHA-256, and stores the
-  client-declared MIME in a companion JSON file. Missing MIME remains null; this is metadata
-  preservation rather than content sniffing. Partial files are removed on failure/cancellation.
-* Test a 64 MiB multipart request, writes before request EOF, WAV/UTF-8 byte identity, MIME
-  metadata, empty/missing files, extra sections and cleanup. Add `task e2e:test:upload`;
-  generated uploads and metadata are Git-ignored.
-* Document the streaming upload recipe, experimental contracts and refreshed API reference.
+### Experimental streams and multipart upload
+
+* Add fluent `CommandStream<TChunk, TSelf>` and `QueryStream<TChunk, TSelf>` inputs, immediate
+  bounded `Pipe`, reusable stream/item converters, and growable `IBufferWriter<T>` staging
+  with asynchronous flush/backpressure. Metadata belongs to the message itself.
+* Root stream inputs are asynchronously disposable. Dispatch/disposal releases producers;
+  output-stream failures preserve the original error and reach consumers/finals. Early
+  output disposal uses `StreamOutputDisposedException`. Explicit context abort still skips
+  finals; output-stream failures bypass exception interceptors.
+* Add a multipart upload recipe and runnable E2E browser form: raw body → pre validation
+  and first-chunk context handoff → incremental file handler → final cleanup. Preserve
+  client-declared MIME in JSON metadata and prove byte identity with SHA-256 and WAV/UTF-8
+  samples. Include cancellation, missing/empty file and malformed-body tests.
+* Add E2E WebSocket input/duplex and SSE examples, root/local Taskfile commands and organized
+  helper scripts. Refresh the generated API reference and documentation for both lines.
 
 
 ## v2.3.1 – '2026-09-14'
